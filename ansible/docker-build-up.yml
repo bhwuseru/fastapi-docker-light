@@ -5,15 +5,15 @@
     - vars/secrets.yml
 
   tasks:
-    - name: Docker Compose コマンドの存在確認（docker-compose または docker compose）
+    - name: Docker Compose コマンドの存在確認
       block:
 
-        - name: docker-compose の存在を確認
+        - name: docker-compose（旧式）の存在確認
           command: which docker-compose
           register: docker_compose_old
           ignore_errors: true
 
-        - name: docker compose の存在を確認（プラグイン）
+        - name: docker compose（プラグイン）の存在確認
           command: docker compose version
           register: docker_compose_plugin
           ignore_errors: true
@@ -36,5 +36,5 @@
           when:
             - docker_compose_old.rc != 0
             - docker_compose_plugin.rc != 0
-          ansible.builtin.debug:
-            msg: "❌ Docker Compose（旧式/プラグイン両方）が見つかりませんでした。"
+          debug:
+            msg: "❌ Docker Compose（旧式/プラグイン）が見つかりませんでした。"

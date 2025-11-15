@@ -1,4 +1,4 @@
-- name: Laravel Docker 環境のリセット
+- name: FastAPI Docker 環境の完全リセット
   hosts: localhost
   gather_facts: yes
   vars_files:
@@ -8,52 +8,102 @@
     project_dir: "{{ playbook_dir }}/docker"
 
   tasks:
-    - name: .env ファイルが存在するか確認
-      stat:
-        path: "{{ project_dir }}/.env"
-      register: env_file
 
     - name: docker-compose（旧式）の存在確認
       command: which docker-compose
-      register: docker_compose_check
+      register: docker_compose_old
       ignore_errors: yes
       changed_when: false
 
     - name: docker compose（プラグイン）の存在確認
-      command: which docker
-      register: docker_plugin_check
+      command: docker compose version
+      register: docker_compose_plugin
       ignore_errors: yes
       changed_when: false
 
-    - name: Docker Compose（旧式）で停止
+    - name: docker-compose 旧式で停止
       shell: docker-compose down
       args:
         chdir: "{{ project_dir }}"
-      when:
-        - env_file.stat.exists
-        - docker_compose_check.rc == 0
+      when: docker_compose_old.rc == 0
 
-    - name: Docker Compose（プラグイン）で停止
+    - name: docker compose プラグインで停止
       shell: docker compose down
       args:
         chdir: "{{ project_dir }}"
       when:
-        - env_file.stat.exists
-        - docker_plugin_check.rc == 0
+        - docker_compose_old.rc != 0
+        - docker_compose_plugin.rc == 0
 
-    - name: Docker Compose が存在しない場合の通知
-      debug:
-        msg: "docker compose がインストールされていないか、.env が存在しないため停止スキップ"
-      when: not env_file.stat.exists
+    # ================================
+    # プロジェクト名を取得
+    # ================================
+    - name: compose プロジェクト名を取得
+      shell: docker compose ls --format '{{"{{"}}.Name{{"}}"}}'
+      args:
+        chdir: "{{ project_dir }}"
+      register: project_name_result
+      ignore_errors: yes
 
-    - name: 使用されていない(dangling)イメージを取得
-      shell: docker images -f "dangling=true" -q
-      register: dangling_images
-      changed_when: false
+    - name: プロジェクト名をセット
+      set_fact:
+        project_name: "{{ project_name_result.stdout | trim }}"
+      when:
+        - project_name_result.stdout is defined
+        - project_name_result.stdout | trim != ""
 
-    - name: 未使用のイメージを削除（存在する場合）
-      shell: docker rmi {{ item }}
-      with_items: "{{ dangling_images.stdout_lines }}"
+    # ================================
+    # コンテナ削除
+    # ================================
+    - name: コンテナ一覧取得
+      shell: docker ps -a --filter "name={{ project_name }}" --format '{{"{{"}}.ID{{"}}"}}'
+      register: target_containers
+      when: project_name is defined
+      ignore_errors: yes
+
+    - name: コンテナ削除
+      shell: docker rm -f {{ item }}
+      loop: "{{ target_containers.stdout_lines }}"
       when: item != ""
       ignore_errors: yes
 
+    # ================================
+    # イメージ削除
+    # ================================
+    - name: イメージ一覧取得
+      shell: docker images --filter "reference={{ project_name }}*" --format '{{"{{"}}.ID{{"}}"}}'
+      register: target_images
+      when: project_name is defined
+      ignore_errors: yes
+
+    - name: イメージ削除
+      shell: docker rmi {{ item }}
+      loop: "{{ target_images.stdout_lines }}"
+      when: item != ""
+      ignore_errors: yes
+
+    # ================================
+    # Volume 削除
+    # ================================
+    - name: サービス名一覧を取得
+      command: docker compose ps --format '{{"{{"}}.Service{{"}}"}}'
+      args:
+        chdir: "{{ project_dir }}"
+      register: project_services
+      when: project_name is defined
+      ignore_errors: yes
+
+    - name: volume 削除
+      shell: docker volume rm {{ project_name }}_{{ item }}
+      loop: "{{ project_services.stdout_lines }}"
+      when:
+        - project_name is defined
+        - item != ""
+      ignore_errors: yes
+
+    # ================================
+    # BuildKit キャッシュ削除
+    # ================================
+    - name: BuildKit キャッシュ削除
+      shell: docker builder prune -f
+      ignore_errors: yes

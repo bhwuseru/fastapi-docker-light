@@ -15,7 +15,6 @@ services:
     environment:
       APP_NAME: ${PROJECT_NAME}
       PROJECT_NAME: ${PROJECT_NAME}
-      # PROXY_PUBLIC_PORT: ${PROXY_PUBLIC_PORT}
       HOSTNAME: ${HOSTNAME}
     # 環境変数を渡す
     command: /bin/sh -c "envsubst '$$PROJECT_NAME $$HOSTNAME' \
@@ -33,8 +32,6 @@ services:
         USER: ${USER}
         PASSWORD: ${DB_PASSWORD}
     container_name: ${APP_NAME}-python
-    ports:
-      - ${PYTHON_PORT}:8000
     expose:
       - 8000
     volumes:
