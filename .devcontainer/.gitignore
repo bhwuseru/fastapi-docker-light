@@ -1,5 +1,0 @@
-.env
-db/data/
-db/init/init.sql
-db/log/
-python/log/php_errors.log

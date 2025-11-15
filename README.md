@@ -1,50 +1,93 @@
-# FastAPIの環境構築
-- [FastAPIの環境構築](#fastapiの環境構築)
-	- [Fast APIのdocker-compose環境構築手順](#fast-apiのdocker-compose環境構築手順)
-	- [make自動化スクリプト実行手順](#make自動化スクリプト実行手順)
-	- [開発時に使用するコマンド](#開発時に使用するコマンド)
-	- [コンテナ内で以下を実行する](#コンテナ内で以下を実行する)
+# 環境構築資料（Ansible対応版）
 
-## Fast APIのdocker-compose環境構築手順
-1. ルートディレクトリ直下の`.envrc.example`を.envrcにリネームしてポート設定やプロジェクト名などの設定を編集をする。<br>
-- **補足**<br>
-.envrc定義情報を元にdocker-compose.ymlが参照する.envファイルを作成する。<br>
-**ポートはホスト側のポートと衝突しないようにする。**<br>
-## make自動化スクリプト実行手順
-以下コマンドを実行するとdockerのコンテナを自動で作成と削除を実行してくれる。
-1. makeが導入されていない場合は以下コマンドで導入する。
-    ```
-    sudo apt install make
-    ```
-2. .envrcファイルの定義情報を元にdocker-composeの開発環境を構築する。
-	```
-    make container-init
-	```
-3. .envrcで定義した環境変数`${PROJECT_NAME}-python`というdockerコンテナが作成されているので、ダッシュボードからアタッチする。<br> 
-または下記コマンドを実行するとコンテナ内に入れる。
-	```
-	docker exec -it ${PROJECT_NAME}-python  /bin/bash  
-	```
-4. コンテナ内に入るとinstall.shスクリプトが配置されているのでプロジェクトがまだ一度も作成されていない場合は以下を実行する。
-	```
-	. ./install.sh
-	```
-5. docker-composeの環境を一旦削除して初期状態に戻したい場合は以下を実行する。
-    ```
-    make container-remove 
-    ```
+- [環境構築資料（Ansible対応版）](#環境構築資料ansible対応版)
+  - [Ansible + Docker開発環境構築手順](#ansible--docker開発環境構築手順)
+    - [必要条件とツールの導入](#必要条件とツールの導入)
+    - [構築手順](#構築手順)
+    - [Ansible構成ファイル](#ansible構成ファイル)
+  - [コンテナ初回起動後の作業](#コンテナ初回起動後の作業)
+  - [開発環境URLアクセス法](#開発環境urlアクセス法)
+  - [Makeコマンド](#makeコマンド)
+  - [Dockerコマンド](#dockerコマンド)
 
-## 開発時に使用するコマンド
+# Ansible + Docker開発環境構築手順
 
-- プロジェクトルートディレクトで以下のスクリプトを実行後に
-.envrc `export PYTHON_PORT`のポートにアクセスすると開発環境にアクセスできる。
+## 必要条件とツールの導入
 
-1. `. ./start_app.sh`
-2. http://localhost:PYTHON_PORT
+以下が導入されていることを確認してください。
 
-## コンテナ内で以下を実行する
+- Docker
+- Docker Compose（旧式またはプラグイン）
+- mkcert
+- Ansible
+- GNU Make
 
-1. venvを有効化
-`venv/bin/activate`
-2. 開発サーバー立ち上げ
-`uvicorn main:app --host 0.0.0.0 --reload`
+Ubuntu での Ansible 導入：
+
+```sh
+sudo apt update && sudo apt install -y ansible
+```
+
+## 構築手順
+
+1. `ansible/vars/secrets.example.yml` を `ansible/vars/secrets.yml` にリネームし、プロジェクト設定を記述：
+
+```yml
+project_name: sample
+user: user
+proxy_template_name: default.conf.template
+...
+```
+
+2. Make コマンドで開発環境を初期化：
+
+```sh
+make container-init
+```
+
+このコマンドにより以下が自動実行されます：
+
+- `.env` ファイルの生成（テンプレートから）
+- `init.sql` の生成（テンプレートから）
+- `proxy/ssl` ディレクトリの作成と pem ファイルの発行（mkcert）
+- Docker Compose によるビルド＆起動
+
+## Ansible構成ファイル
+
+- `ansible/environment-setup.yml`: 開発環境をセットアップする
+- `ansible/docker-build-up.yml`: コンテナビルド＆起動
+- `ansible/docker-container-reset.yml`: コンテナ停止＆削除
+- `vars/secrets.yml`: 環境変数の定義（project\_name など）
+- `templates/env.j2`: .envのテンプレート
+
+# コンテナ初回起動後の作業
+
+# 開発環境URLアクセス法
+
+- Python アプリ: `http://127.0.0.1:PROXY_PUBLIC_PORT/`
+
+
+# Makeコマンド
+
+```sh
+make container-init       # 初期セットアップ（環境 + ビルド＆起動）
+make docker-setup-env     # 環境のみセットアップ（env, SQL, sslなど）
+make container-build-up   # コンテナビルド＆起動
+make container-remove     # コンテナ停止＆データ削除＆初期化状態へ
+```
+
+# Dockerコマンド
+
+```sh
+# コンテナ停止
+cd docker && docker compose down
+
+# ボリューム・イメージも含め削除
+cd docker && docker compose down --rmi all --volumes --remove-orphans
+
+# 未使用（dangling）イメージ削除
+docker rmi $(docker images -f "dangling=true" -q)
+
+# キャッシュ削除
+docker builder prune
+```

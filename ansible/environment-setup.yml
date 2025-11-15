@@ -1,0 +1,26 @@
+- name: Python Docker 開発環境初期化
+  hosts: localhost
+  gather_facts: yes
+  vars_files:
+    - vars/secrets.yml
+
+  tasks:
+    - name: .env をテンプレートから生成
+      template:
+        src: templates/env.j2
+        dest: "{{ playbook_dir }}/docker/.env"
+    - name: main.py を python/html ディレクトリへコピー
+      copy:
+        src: "{{ playbook_dir }}/docker/python/main.py"
+        dest: "{{ playbook_dir }}/docker/python/html/main.py"
+        mode: '0755'
+    - name: start_app.sh を python/html ディレクトリへコピー
+      copy:
+        src: "{{ playbook_dir }}/docker/python/start_app.sh"
+        dest: "{{ playbook_dir }}/docker/python/html/start_app.sh"
+        mode: '0755'
+    - name: install.sh を python/html ディレクトリへコピー
+      copy:
+        src: "{{ playbook_dir }}/docker/python/install.sh"
+        dest: "{{ playbook_dir }}/docker/python/html/install.sh"
+        mode: '0755'
